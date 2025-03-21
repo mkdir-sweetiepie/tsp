@@ -1,0 +1,5 @@
+-I/home/hyeon/tsp/include
+-I/home/hyeon/tsp/build
+-o
+/home/hyeon/tsp/build/include/moc_mainwindow.cpp
+/home/hyeon/tsp/include/mainwindow.h
