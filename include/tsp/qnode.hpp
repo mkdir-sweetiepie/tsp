@@ -14,9 +14,14 @@
 
 #include <QObject>
 #include <QThread>
+#include <QVector>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
-#include <vision_msgs/msg/detected_crop_array.hpp>  // 추가: 참외 감지 메시지 타입
+#include <vision_msgs/msg/detected_crop_array.hpp>
+#include <vision_msgs/msg/harvest_ordering.hpp>
+
+// Point3D 클래스 참조
+struct Point3D;
 
 /*****************************************************************************
 ** Class
@@ -37,6 +42,9 @@ class QNode : public QThread {
   // 감지된 참외 데이터 접근
   const vision_msgs::msg::DetectedCropArray& getCropData() const { return crop_data; }
 
+  // 수확 순서 발행 메소드 추가
+  void publishHarvestOrder(const QVector<int>& path, const QVector<Point3D>& points);
+
  Q_SIGNALS:
   void rosShutDown();
   void newCropDataReceived();  // 새 참외 데이터가 수신되면 발생하는 시그널
@@ -47,6 +55,9 @@ class QNode : public QThread {
   // 참외 감지 데이터 구독
   rclcpp::Subscription<vision_msgs::msg::DetectedCropArray>::SharedPtr crop_subscription;
   vision_msgs::msg::DetectedCropArray crop_data;
+
+  // 수확 순서 발행자 추가
+  rclcpp::Publisher<vision_msgs::msg::HarvestOrdering>::SharedPtr harvest_publisher;
 
   // 참외 데이터 콜백 함수
   void cropCallback(const vision_msgs::msg::DetectedCropArray::SharedPtr msg);

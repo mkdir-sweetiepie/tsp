@@ -164,6 +164,9 @@ void MainWindow::setupUI() {
   // 레이아웃 추가
   mainLayout->addLayout(leftLayout, 1);
   mainLayout->addWidget(visualGroupBox, 2);
+
+  publishButton = new QPushButton("경로 ROS2 발행");
+  controlLayout->addWidget(publishButton);
 }
 
 void MainWindow::resetAll() {
@@ -192,6 +195,7 @@ void MainWindow::setupConnections() {
 
   // 테이블 데이터 변경 감지
   connect(coordTable, &QTableWidget::cellChanged, this, &MainWindow::onTableDataChanged);
+  connect(publishButton, &QPushButton::clicked, this, &MainWindow::publishOptimalPath);
 }
 
 // 참외 데이터 요청 핸들러 (버튼 클릭 시)
@@ -644,6 +648,7 @@ void MainWindow::calculateOptimalPath() {
 
   // 시각화 업데이트
   updatePathVisualization();
+  publishOptimalPath();
 }
 
 void MainWindow::addDefaultPoints() {
@@ -680,4 +685,19 @@ void MainWindow::addDefaultPoints() {
   }
 
   isInitializing = false;  // 초기화 플래그 해제
+}
+
+// 최적 경로 ROS2 발행 함수
+void MainWindow::publishOptimalPath() {
+  // 경로가 없으면 발행하지 않음
+  if (optimalPath.isEmpty() || points.isEmpty()) {
+    statusLabel->setText("발행할 경로가 없습니다. 먼저 경로를 계산하세요.");
+    return;
+  }
+
+  // QNode를 통해 수확 순서 발행
+  qnode->publishHarvestOrder(optimalPath, points);
+
+  // 상태 업데이트
+  statusLabel->setText("수확 순서가 ROS2 토픽 '/harvest_ordering'에 발행되었습니다.");
 }

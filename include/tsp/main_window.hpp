@@ -70,6 +70,7 @@ class MainWindow : public QMainWindow {
   void onTableDataChanged(int row, int column);  // 테이블 데이터 변경 이벤트 처리
   void processCropData();                        // 수신된 참외 데이터 처리
   void requestCropData();                        // 참외 데이터 요청 버튼 클릭 핸들러
+  void publishOptimalPath();
 
  private:
   void closeEvent(QCloseEvent* event) override;  // 윈도우 닫기 이벤트 처리
@@ -91,6 +92,7 @@ class MainWindow : public QMainWindow {
   QPushButton* cropDataButton;     // 감지된 참외 데이터 요청 버튼
   QLabel* resultLabel;             // 결과 표시 레이블
   QLabel* statusLabel;             // 상태 표시 레이블
+  QPushButton* publishButton;
 
   QtDataVisualization::Q3DScatter* scatter3D;          // 3D 산점도 시각화 객체
   QtDataVisualization::QScatter3DSeries* pointSeries;  // 점 시리즈
