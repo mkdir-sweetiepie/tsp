@@ -19,7 +19,7 @@ QNode::QNode() {
   node = rclcpp::Node::make_shared("tsp");
 
   // 참외 감지 데이터 구독
-  crop_subscription = node->create_subscription<vision_msgs::msg::DetectedCropArray>("detected_crops", 10,  // 토픽 이름과 큐 크기
+  crop_subscription = node->create_subscription<vision_msgs::msg::DetectedCropArray>("/detected_crops", 10,  // 토픽 이름과 큐 크기
                                                                                      std::bind(&QNode::cropCallback, this, std::placeholders::_1));
 
   this->start();
