@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Script to generate README.md for the TSP ROS2 package
 
 cat > README.md << 'EOF'
