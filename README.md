@@ -1,6 +1,3 @@
-# Script to generate README.md for the TSP ROS2 package
-
-cat > README.md << 'EOF'
 # TSP (Traveling Salesman Problem) Solver for ROS2
 
 ![TSP Solver Visualization](https://github.com/user-attachments/assets/a1002c61-1530-4454-a97f-fd761a2992cd)
@@ -57,28 +54,13 @@ To run the TSP solver with visualization:
 ros2 run tsp tsp
 ```
 
-### Configuration
-
-You can configure the solver by modifying the parameters in the config file:
-
-```bash
-ros2 run tsp tsp --ros-args -p num_points:=20 -p algorithm:=genetic
-```
-
-Available parameters:
-- `num_points`: Number of points to generate (default: 10)
-- `algorithm`: Solver algorithm (options: nearest, genetic, simulated_annealing, default: genetic)
-- `display_mode`: Visualization mode (options: 2d, 3d, default: 3d)
-
 ## Topics
 
-### Published Topics
-- `/tsp/path` (geometry_msgs/Path): The calculated optimal path
-- `/tsp/points` (geometry_msgs/PoseArray): The set of points being processed
-
 ### Subscribed Topics
-- `/tsp/add_point` (geometry_msgs/PoseStamped): Add a new point to the current set
-- `/tsp/reset` (std_msgs/Empty): Reset all points and start over
+- `/detected_crops` (vision_msgs::msg::DetectedCropArray): Input points for TSP calculation
+
+### Published Topics
+- `/harvest_ordering` (vision_msgs::msg::HarvestOrdering): The calculated optimal ordering for harvest
 
 ## Contributing
 
