@@ -130,16 +130,18 @@ void MainWindow::setupUI() {
   scatter3D->setShadowQuality(QAbstract3DGraph::ShadowQualitySoftLow);
   scatter3D->scene()->activeCamera()->setCameraPreset(Q3DCamera::CameraPresetIsometricRight);
 
-  // 축 설정
+  // 축 설정 (음수 범위 허용)
   scatter3D->axisX()->setTitle("X");
   scatter3D->axisY()->setTitle("Y");
   scatter3D->axisZ()->setTitle("Z");
   scatter3D->axisX()->setTitleVisible(true);
   scatter3D->axisY()->setTitleVisible(true);
   scatter3D->axisZ()->setTitleVisible(true);
-  scatter3D->axisX()->setRange(0, 10);
-  scatter3D->axisY()->setRange(0, 10);
-  scatter3D->axisZ()->setRange(0, 10);
+
+  // 음수 범위를 포함하도록 설정
+  scatter3D->axisX()->setRange(-10, 10);
+  scatter3D->axisY()->setRange(-10, 10);
+  scatter3D->axisZ()->setRange(-10, 10);
 
   // 참외 위치 시리즈 설정
   pointSeries = new QScatter3DSeries;
@@ -328,9 +330,9 @@ void MainWindow::removePoint() {
 void MainWindow::randomizePoints() {
   isInitializing = true;  // 초기화 플래그 설정
 
-  std::random_device rd;                                    // 랜덤 디바이스 생성
-  std::mt19937 gen(rd());                                   // 메르센 트위스터 엔진 생성
-  std::uniform_real_distribution<float> dist(0.0f, 10.0f);  // 0~10 사이의 실수값 생성
+  std::random_device rd;                                      // 랜덤 디바이스 생성
+  std::mt19937 gen(rd());                                     // 메르센 트위스터 엔진 생성
+  std::uniform_real_distribution<float> dist(-10.0f, 10.0f);  // -10~10 사이의 실수값 생성 (음수 포함)
 
   // 기존의 모든 행에 대해 랜덤 좌표 설정
   for (int row = 0; row < coordTable->rowCount(); ++row) {
@@ -361,6 +363,40 @@ void MainWindow::randomizePoints() {
 }
 
 void MainWindow::updateVisualization() {
+  // 좌표 범위 찾기
+  float minX = 0, minY = 0, minZ = 0;
+  float maxX = 10, maxY = 10, maxZ = 10;
+
+  if (!points.isEmpty()) {
+    minX = maxX = points[0].x;
+    minY = maxY = points[0].y;
+    minZ = maxZ = points[0].z;
+
+    for (const Point3D& point : points) {
+      minX = std::min(minX, point.x);
+      minY = std::min(minY, point.y);
+      minZ = std::min(minZ, point.z);
+
+      maxX = std::max(maxX, point.x);
+      maxY = std::max(maxY, point.y);
+      maxZ = std::max(maxZ, point.z);
+    }
+
+    // 여백 추가
+    const float padding = 2.0f;
+    minX -= padding;
+    minY -= padding;
+    minZ -= padding;
+    maxX += padding;
+    maxY += padding;
+    maxZ += padding;
+  }
+
+  // 데이터 기반으로 축 범위 설정 (음수 범위 허용)
+  scatter3D->axisX()->setRange(minX, maxX);
+  scatter3D->axisY()->setRange(minY, maxY);
+  scatter3D->axisZ()->setRange(minZ, maxZ);
+
   // 점 데이터 업데이트
   QScatterDataArray* dataArray = new QScatterDataArray;
   dataArray->resize(points.size());
@@ -661,7 +697,7 @@ void MainWindow::addDefaultPoints() {
   // 랜덤 좌표 생성을 위한 설정
   std::random_device rd;
   std::mt19937 gen(rd());
-  std::uniform_real_distribution<float> dist(0.0f, 10.0f);
+  std::uniform_real_distribution<float> dist(-10.0f, 10.0f);  // -10~10 사이 랜덤 값 (음수 포함)
 
   // 8개의 참외 생성 (랜덤 좌표)
   const int numPoints = 8;
@@ -670,7 +706,7 @@ void MainWindow::addDefaultPoints() {
     int row = coordTable->rowCount();
     coordTable->insertRow(row);
 
-    // 랜덤 좌표 생성
+    // 랜덤 좌표 생성 (음수 포함)
     float x = dist(gen);
     float y = dist(gen);
     float z = dist(gen);
