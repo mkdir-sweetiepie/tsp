@@ -130,18 +130,18 @@ void MainWindow::setupUI() {
   scatter3D->setShadowQuality(QAbstract3DGraph::ShadowQualitySoftLow);
   scatter3D->scene()->activeCamera()->setCameraPreset(Q3DCamera::CameraPresetIsometricRight);
 
-  // 축 설정 (음수 범위 허용)
+  // 축 설정 (X,Y축: -50~50, Z축: 0~100)
   scatter3D->axisX()->setTitle("X");
   scatter3D->axisY()->setTitle("Y");
   scatter3D->axisZ()->setTitle("Z");
   scatter3D->axisX()->setTitleVisible(true);
   scatter3D->axisY()->setTitleVisible(true);
   scatter3D->axisZ()->setTitleVisible(true);
-
-  // 음수 범위를 포함하도록 설정
-  scatter3D->axisX()->setRange(-10, 10);
-  scatter3D->axisY()->setRange(-10, 10);
-  scatter3D->axisZ()->setRange(-10, 10);
+  
+  // 고정 범위 설정
+  scatter3D->axisX()->setRange(-50, 50);
+  scatter3D->axisY()->setRange(-50, 50);
+  scatter3D->axisZ()->setRange(0, 100);
 
   // 참외 위치 시리즈 설정
   pointSeries = new QScatter3DSeries;
@@ -231,15 +231,19 @@ void MainWindow::processCropData() {
 
     // 이름은 "참외" + ID로 설정
     QString name = QString("참외%1").arg(crop.id);
+    
+    // Z좌표가 음수일 경우 0으로 조정
+    float z = crop.z;
+    if (z < 0) z = 0.0f;
 
     // 테이블 항목 추가
     coordTable->setItem(row, 0, new QTableWidgetItem(name));
     coordTable->setItem(row, 1, new QTableWidgetItem(QString::number(crop.x, 'f', 2)));
     coordTable->setItem(row, 2, new QTableWidgetItem(QString::number(crop.y, 'f', 2)));
-    coordTable->setItem(row, 3, new QTableWidgetItem(QString::number(crop.z, 'f', 2)));
+    coordTable->setItem(row, 3, new QTableWidgetItem(QString::number(z, 'f', 2)));
 
-    // points 배열에 추가
-    points.append(Point3D(crop.x, crop.y, crop.z, name));
+    // points 배열에 추가 (Z좌표 조정됨)
+    points.append(Point3D(crop.x, crop.y, z, name));
   }
 
   isInitializing = false;
@@ -272,6 +276,12 @@ void MainWindow::onTableDataChanged(int row, int column) {
       value = 0.0f;
       coordTable->item(row, column)->setText("0.0");
     }
+    
+    // Z좌표(column=3)가 음수일 경우 0으로 조정
+    if (column == 3 && value < 0) {
+      value = 0.0f;
+      coordTable->item(row, column)->setText("0.0");
+    }
 
     // points 배열 업데이트
     if (column == 1)
@@ -295,9 +305,9 @@ void MainWindow::addPoint() {
 
   QString name = QString("참외%1").arg(row + 1);
   coordTable->setItem(row, 0, new QTableWidgetItem(name));
-  coordTable->setItem(row, 1, new QTableWidgetItem("0.0"));
-  coordTable->setItem(row, 2, new QTableWidgetItem("0.0"));
-  coordTable->setItem(row, 3, new QTableWidgetItem("0.0"));
+  coordTable->setItem(row, 1, new QTableWidgetItem("0.0"));   // X = 0
+  coordTable->setItem(row, 2, new QTableWidgetItem("0.0"));   // Y = 0
+  coordTable->setItem(row, 3, new QTableWidgetItem("0.0"));   // Z = 0 (양수 범위에서 시작)
 
   Point3D newPoint(0, 0, 0, name);  // 기본 좌표(0,0,0)와 이름으로 새 점 생성
   points.append(newPoint);          // points 배열에 새 점 추가
@@ -330,15 +340,20 @@ void MainWindow::removePoint() {
 void MainWindow::randomizePoints() {
   isInitializing = true;  // 초기화 플래그 설정
 
-  std::random_device rd;                                      // 랜덤 디바이스 생성
-  std::mt19937 gen(rd());                                     // 메르센 트위스터 엔진 생성
-  std::uniform_real_distribution<float> dist(-10.0f, 10.0f);  // -10~10 사이의 실수값 생성 (음수 포함)
+  std::random_device rd;       // 랜덤 디바이스 생성
+  std::mt19937 gen(rd());      // 메르센 트위스터 엔진 생성
+  
+  // X, Y축 범위 (-50~50)
+  std::uniform_real_distribution<float> distXY(-50.0f, 50.0f);
+  
+  // Z축 범위 (0~100)
+  std::uniform_real_distribution<float> distZ(0.0f, 100.0f);
 
   // 기존의 모든 행에 대해 랜덤 좌표 설정
   for (int row = 0; row < coordTable->rowCount(); ++row) {
-    float x = dist(gen);
-    float y = dist(gen);
-    float z = dist(gen);
+    float x = distXY(gen);
+    float y = distXY(gen);
+    float z = distZ(gen);  // Z축은 0~100 범위로 설정
 
     // 테이블 업데이트
     coordTable->item(row, 1)->setText(QString::number(x, 'f', 2));
@@ -363,39 +378,10 @@ void MainWindow::randomizePoints() {
 }
 
 void MainWindow::updateVisualization() {
-  // 좌표 범위 찾기
-  float minX = 0, minY = 0, minZ = 0;
-  float maxX = 10, maxY = 10, maxZ = 10;
-
-  if (!points.isEmpty()) {
-    minX = maxX = points[0].x;
-    minY = maxY = points[0].y;
-    minZ = maxZ = points[0].z;
-
-    for (const Point3D& point : points) {
-      minX = std::min(minX, point.x);
-      minY = std::min(minY, point.y);
-      minZ = std::min(minZ, point.z);
-
-      maxX = std::max(maxX, point.x);
-      maxY = std::max(maxY, point.y);
-      maxZ = std::max(maxZ, point.z);
-    }
-
-    // 여백 추가
-    const float padding = 2.0f;
-    minX -= padding;
-    minY -= padding;
-    minZ -= padding;
-    maxX += padding;
-    maxY += padding;
-    maxZ += padding;
-  }
-
-  // 데이터 기반으로 축 범위 설정 (음수 범위 허용)
-  scatter3D->axisX()->setRange(minX, maxX);
-  scatter3D->axisY()->setRange(minY, maxY);
-  scatter3D->axisZ()->setRange(minZ, maxZ);
+  // 항상 고정된 축 범위 사용
+  scatter3D->axisX()->setRange(-50, 50);
+  scatter3D->axisY()->setRange(-50, 50);
+  scatter3D->axisZ()->setRange(0, 100);
 
   // 점 데이터 업데이트
   QScatterDataArray* dataArray = new QScatterDataArray;
@@ -697,7 +683,12 @@ void MainWindow::addDefaultPoints() {
   // 랜덤 좌표 생성을 위한 설정
   std::random_device rd;
   std::mt19937 gen(rd());
-  std::uniform_real_distribution<float> dist(-10.0f, 10.0f);  // -10~10 사이 랜덤 값 (음수 포함)
+  
+  // X, Y축 범위 (-50~50)
+  std::uniform_real_distribution<float> distXY(-50.0f, 50.0f);
+  
+  // Z축 범위 (0~100)
+  std::uniform_real_distribution<float> distZ(0.0f, 100.0f);
 
   // 8개의 참외 생성 (랜덤 좌표)
   const int numPoints = 8;
@@ -706,10 +697,10 @@ void MainWindow::addDefaultPoints() {
     int row = coordTable->rowCount();
     coordTable->insertRow(row);
 
-    // 랜덤 좌표 생성 (음수 포함)
-    float x = dist(gen);
-    float y = dist(gen);
-    float z = dist(gen);
+    // 랜덤 좌표 생성 (X,Y: -50~50, Z: 0~100)
+    float x = distXY(gen);
+    float y = distXY(gen);
+    float z = distZ(gen);
 
     QString name = QString("참외%1").arg(i + 1);
     coordTable->setItem(row, 0, new QTableWidgetItem(name));
