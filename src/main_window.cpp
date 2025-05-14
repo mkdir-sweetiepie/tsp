@@ -33,6 +33,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
   ui->setupUi(this);
   setWindowTitle("참외 수확 경로 최적화 (Held-Karp)");
 
+  // 매니퓰레이터 위치 초기화 (0, 0, 50)
+  manipulatorPosition = Point3D(0, 0, 50, "로봇");
+
   // ROS2 노드 초기화
   qnode = new QNode();
   QObject::connect(qnode, SIGNAL(rosShutDown()), this, SLOT(close()));
@@ -101,6 +104,15 @@ void MainWindow::setupUI() {
 
   leftLayout->addWidget(controlGroupBox);
 
+  // 매니퓰레이터 위치 설정 영역 추가
+  QGroupBox* manipulatorGroupBox = new QGroupBox("매니퓰레이터 시작 위치");
+  QVBoxLayout* manipulatorLayout = new QVBoxLayout(manipulatorGroupBox);
+
+  QLabel* manipulatorLabel = new QLabel("현재 위치: (0, 0, 50)");
+  manipulatorLayout->addWidget(manipulatorLabel);
+
+  leftLayout->addWidget(manipulatorGroupBox);
+
   // 결과 표시 영역
   QGroupBox* resultGroupBox = new QGroupBox("계산 결과");
   QVBoxLayout* resultLayout = new QVBoxLayout(resultGroupBox);
@@ -132,16 +144,20 @@ void MainWindow::setupUI() {
 
   // 축 설정 (X,Y축: -50~50, Z축: 0~100)
   scatter3D->axisX()->setTitle("X");
-  scatter3D->axisY()->setTitle("Y");
+  scatter3D->axisY()->setTitle("Y (아래 방향 +)");  // Y축 레이블 변경
   scatter3D->axisZ()->setTitle("Z");
   scatter3D->axisX()->setTitleVisible(true);
   scatter3D->axisY()->setTitleVisible(true);
   scatter3D->axisZ()->setTitleVisible(true);
-  
+
   // 고정 범위 설정
   scatter3D->axisX()->setRange(-50, 50);
   scatter3D->axisY()->setRange(-50, 50);
   scatter3D->axisZ()->setRange(0, 100);
+
+  // Y축 방향 반전 (아래로 +값이 되도록)
+  QValue3DAxis* yAxis = scatter3D->axisY();
+  yAxis->setReversed(true);  // Y축 방향 반전
 
   // 참외 위치 시리즈 설정
   pointSeries = new QScatter3DSeries;
@@ -162,6 +178,13 @@ void MainWindow::setupUI() {
   orderSeries->setItemSize(0.2f);
   orderSeries->setMesh(QAbstract3DSeries::MeshCube);  // 큐브 모양으로 표시
   scatter3D->addSeries(orderSeries);
+
+  // 로봇 위치 시리즈 설정 (별도 추가)
+  manipulatorSeries = new QScatter3DSeries;
+  manipulatorSeries->setItemSize(0.3f);
+  manipulatorSeries->setMesh(QAbstract3DSeries::MeshMinimal);  // 다른 형태로 표시
+  manipulatorSeries->setBaseColor(QColor(0, 0, 255));          // 파란색
+  scatter3D->addSeries(manipulatorSeries);
 
   // 레이아웃 추가
   mainLayout->addLayout(leftLayout, 1);
@@ -231,7 +254,7 @@ void MainWindow::processCropData() {
 
     // 이름은 "참외" + ID로 설정
     QString name = QString("참외%1").arg(crop.id);
-    
+
     // Z좌표가 음수일 경우 0으로 조정
     float z = crop.z;
     if (z < 0) z = 0.0f;
@@ -276,7 +299,7 @@ void MainWindow::onTableDataChanged(int row, int column) {
       value = 0.0f;
       coordTable->item(row, column)->setText("0.0");
     }
-    
+
     // Z좌표(column=3)가 음수일 경우 0으로 조정
     if (column == 3 && value < 0) {
       value = 0.0f;
@@ -305,9 +328,9 @@ void MainWindow::addPoint() {
 
   QString name = QString("참외%1").arg(row + 1);
   coordTable->setItem(row, 0, new QTableWidgetItem(name));
-  coordTable->setItem(row, 1, new QTableWidgetItem("0.0"));   // X = 0
-  coordTable->setItem(row, 2, new QTableWidgetItem("0.0"));   // Y = 0
-  coordTable->setItem(row, 3, new QTableWidgetItem("0.0"));   // Z = 0 (양수 범위에서 시작)
+  coordTable->setItem(row, 1, new QTableWidgetItem("0.0"));  // X = 0
+  coordTable->setItem(row, 2, new QTableWidgetItem("0.0"));  // Y = 0
+  coordTable->setItem(row, 3, new QTableWidgetItem("0.0"));  // Z = 0 (양수 범위에서 시작)
 
   Point3D newPoint(0, 0, 0, name);  // 기본 좌표(0,0,0)와 이름으로 새 점 생성
   points.append(newPoint);          // points 배열에 새 점 추가
@@ -340,12 +363,12 @@ void MainWindow::removePoint() {
 void MainWindow::randomizePoints() {
   isInitializing = true;  // 초기화 플래그 설정
 
-  std::random_device rd;       // 랜덤 디바이스 생성
-  std::mt19937 gen(rd());      // 메르센 트위스터 엔진 생성
-  
+  std::random_device rd;   // 랜덤 디바이스 생성
+  std::mt19937 gen(rd());  // 메르센 트위스터 엔진 생성
+
   // X, Y축 범위 (-50~50)
   std::uniform_real_distribution<float> distXY(-50.0f, 50.0f);
-  
+
   // Z축 범위 (0~100)
   std::uniform_real_distribution<float> distZ(0.0f, 100.0f);
 
@@ -389,10 +412,17 @@ void MainWindow::updateVisualization() {
 
   // 각 점의 좌표를 데이터 배열에 설정
   for (int i = 0; i < points.size(); ++i) {
+    // Y 좌표는 그대로 사용 (Qt에서 setReversed(true)를 통해 이미 반전됨)
     (*dataArray)[i].setPosition(QVector3D(points[i].x, points[i].y, points[i].z));
   }
   // 점 시리즈 업데이트
   pointSeries->dataProxy()->resetArray(dataArray);
+
+  // 매니퓰레이터 위치 시각화
+  QtDataVisualization::QScatterDataArray* manipulatorArray = new QtDataVisualization::QScatterDataArray;
+  manipulatorArray->resize(1);
+  (*manipulatorArray)[0].setPosition(QVector3D(manipulatorPosition.x, manipulatorPosition.y, manipulatorPosition.z));
+  manipulatorSeries->dataProxy()->resetArray(manipulatorArray);
 
   // 경로가 있을 경우 경로 데이터 업데이트
   if (!optimalPath.isEmpty()) {
@@ -405,34 +435,17 @@ void MainWindow::updateVisualization() {
 }
 
 void MainWindow::updatePathVisualization() {
-  // 경로가 없거나 점이 없으면 초기화
-  if (optimalPath.isEmpty() || points.isEmpty()) {
+  // 경로가 없으면 초기화
+  if (optimalPath.isEmpty()) {
     pathSeries->dataProxy()->resetArray(new QScatterDataArray);
     orderSeries->dataProxy()->resetArray(new QScatterDataArray);
     return;
   }
 
-  // 먼저 모든 경로 인덱스가 유효한지 확인
-  bool validPath = true;
-  for (int idx : optimalPath) {
-    if (idx < 0 || idx >= points.size()) {
-      validPath = false;
-      break;
-    }
-  }
-
-  if (!validPath) {
-    // 경로가 유효하지 않으면 경로 초기화
-    optimalPath.clear();
-    pathSeries->dataProxy()->resetArray(new QScatterDataArray);
-    orderSeries->dataProxy()->resetArray(new QScatterDataArray);
-    return;
-  }
-
-  // 1. 경로 선 그리기
+  // 경로 선 그리기
   QScatterDataArray* pathArray = new QScatterDataArray;
   int pathLength = optimalPath.size();
-  int pointsPerSegment = 100;  // 더 많은 점으로 선을 부드럽게
+  int pointsPerSegment = 100;
   int totalPoints = (pathLength - 1) * pointsPerSegment;
   pathArray->resize(totalPoints);
 
@@ -440,15 +453,32 @@ void MainWindow::updatePathVisualization() {
 
   // 각 세그먼트를 여러 점으로 보간하여 선으로 표현
   for (int i = 0; i < pathLength - 1; ++i) {
-    int pointIndex1 = optimalPath[i];
-    int pointIndex2 = optimalPath[i + 1];
+    QVector3D startPos, endPos;
 
+    // 시작점 결정
+    if (optimalPath[i] == -1) {
+      // 매니퓰레이터 위치
+      startPos = QVector3D(manipulatorPosition.x, manipulatorPosition.y, manipulatorPosition.z);
+    } else {
+      // 참외 위치
+      startPos = QVector3D(points[optimalPath[i]].x, points[optimalPath[i]].y, points[optimalPath[i]].z);
+    }
+
+    // 끝점 결정
+    if (optimalPath[i + 1] == -1) {
+      // 매니퓰레이터 위치
+      endPos = QVector3D(manipulatorPosition.x, manipulatorPosition.y, manipulatorPosition.z);
+    } else {
+      // 참외 위치
+      endPos = QVector3D(points[optimalPath[i + 1]].x, points[optimalPath[i + 1]].y, points[optimalPath[i + 1]].z);
+    }
+
+    // 선분을 여러 점으로 보간
     for (int j = 0; j < pointsPerSegment; ++j) {
       float t = static_cast<float>(j) / pointsPerSegment;
-
-      float x = points[pointIndex1].x * (1 - t) + points[pointIndex2].x * t;
-      float y = points[pointIndex1].y * (1 - t) + points[pointIndex2].y * t;
-      float z = points[pointIndex1].z * (1 - t) + points[pointIndex2].z * t;
+      float x = startPos.x() * (1 - t) + endPos.x() * t;
+      float y = startPos.y() * (1 - t) + endPos.y() * t;
+      float z = startPos.z() * (1 - t) + endPos.z() * t;
 
       (*pathArray)[arrayIndex++].setPosition(QVector3D(x, y, z));
     }
@@ -456,29 +486,15 @@ void MainWindow::updatePathVisualization() {
 
   // 경로 시리즈 업데이트
   pathSeries->dataProxy()->resetArray(pathArray);
-  pathSeries->setItemSize(0.05f);             // 작은 점으로 선처럼 보이게
+  pathSeries->setItemSize(0.05f);
   pathSeries->setBaseColor(QColor(Qt::red));  // 경로는 빨간색
-
-  // 2. 경로 시작점 표시
-  QScatterDataArray* startArray = new QScatterDataArray;
-  startArray->resize(1);
-
-  int startPointIndex = optimalPath[0];
-  (*startArray)[0].setPosition(QVector3D(points[startPointIndex].x, points[startPointIndex].y + 0.3f, points[startPointIndex].z));
-
-  orderSeries->dataProxy()->resetArray(startArray);
-  orderSeries->setItemSize(0.25f);
-  orderSeries->setBaseColor(QColor(0, 0, 255));  // 시작점은 파란색
-  orderSeries->setMesh(QAbstract3DSeries::MeshCube);
 }
 
 // 여기서 부터 최적 경로 계산 함수
 void MainWindow::calculateOptimalPath() {
-  // 현재 points 배열 사용 (테이블에서 다시 읽지 않음)
-
   int n = points.size();
-  if (n <= 1) {
-    QMessageBox::warning(this, "경고", "최소 2개 이상의 점이 필요합니다.");
+  if (n == 0) {
+    QMessageBox::warning(this, "경고", "최소 1개 이상의 참외가 필요합니다.");
     return;
   }
 
@@ -486,186 +502,88 @@ void MainWindow::calculateOptimalPath() {
   optimalPath.clear();
   minCost = 0;
 
-  // 8개 이하의 점에 대해서는 무차별 대입(Brute Force) 방식 사용
-  if (n <= 12) {
-    std::vector<int> indices;
-    for (int i = 1; i < n; ++i) {
-      indices.push_back(i);
-    }
+  // 매니퓰레이터와 모든 참외 간의 거리 행렬 계산
+  std::vector<std::vector<double>> dist(n + 1, std::vector<double>(n + 1, 0));
 
-    std::vector<int> bestPath;
-    double bestCost = std::numeric_limits<double>::max();
-
-    // 거리 행렬 계산
-    std::vector<std::vector<double>> dist(n, std::vector<double>(n));
-    for (int i = 0; i < n; ++i) {
-      for (int j = 0; j < n; ++j) {
-        if (i == j) {
-          dist[i][j] = 0;
-        } else {
-          double dx = points[i].x - points[j].x;
-          double dy = points[i].y - points[j].y;
-          double dz = points[i].z - points[j].z;
-          dist[i][j] = std::sqrt(dx * dx + dy * dy + dz * dz);
-        }
-      }
-    }
-
-    // 모든 순열 시도
-    do {
-      double currentCost = dist[0][indices[0]];  // 시작점에서 첫 번째 도시까지
-
-      for (int i = 0; i < indices.size() - 1; ++i) {
-        currentCost += dist[indices[i]][indices[i + 1]];
-      }
-
-      currentCost += dist[indices.back()][0];  // 마지막 도시에서 시작점으로
-
-      if (currentCost < bestCost) {
-        bestCost = currentCost;
-        bestPath = indices;
-      }
-
-    } while (std::next_permutation(indices.begin(), indices.end()));
-
-    // 최적 경로 구성
-    optimalPath.clear();
-    optimalPath.push_back(0);  // 시작점
-
-    for (int idx : bestPath) {
-      optimalPath.push_back(idx);
-    }
-
-    optimalPath.push_back(0);  // 시작점으로 돌아오기
-    minCost = bestCost;
-
-    // 결과 표시
-    QString resultText = QString("최적 경로 비용: %1\n경로: ").arg(minCost);
-    for (int i = 0; i < optimalPath.size(); ++i) {
-      int idx = optimalPath[i];
-      resultText += points[idx].name;
-      if (i < optimalPath.size() - 1) {
-        resultText += " → ";
-      }
-    }
-
-    resultLabel->setText(resultText);
-    updatePathVisualization();
-    return;
-  }
-
-  // 최대 12개 점까지 계산 허용 (2^12 상태를 고려)
-  if (n > 12) {
-    QMessageBox::warning(this, "경고", "계산 효율성을 위해 최대 12개 점까지 지원합니다.");
-    return;
-  }
-
-  // 거리 행렬 계산
-  std::vector<std::vector<double>> dist(n, std::vector<double>(n));
-  for (int i = 0; i < n; ++i) {
-    for (int j = 0; j < n; ++j) {
+  // 매니퓰레이터 위치는 인덱스 0으로 처리
+  for (int i = 0; i <= n; ++i) {
+    for (int j = 0; j <= n; ++j) {
       if (i == j) {
-        dist[i][j] = 0;
+        dist[i][j] = 0;  // 자기 자신까지의 거리는 0
+      } else if (i == 0) {
+        // 매니퓰레이터에서 참외까지의 거리
+        double dx = manipulatorPosition.x - points[j - 1].x;
+        double dy = manipulatorPosition.y - points[j - 1].y;
+        double dz = manipulatorPosition.z - points[j - 1].z;
+        dist[i][j] = std::sqrt(dx * dx + dy * dy + dz * dz);
+      } else if (j == 0) {
+        // 참외에서 매니퓰레이터까지의 거리
+        double dx = points[i - 1].x - manipulatorPosition.x;
+        double dy = points[i - 1].y - manipulatorPosition.y;
+        double dz = points[i - 1].z - manipulatorPosition.z;
+        dist[i][j] = std::sqrt(dx * dx + dy * dy + dz * dz);
       } else {
-        // 3D 유클리드 거리 계산
-        double dx = points[i].x - points[j].x;
-        double dy = points[i].y - points[j].y;
-        double dz = points[i].z - points[j].z;
+        // 참외 간의 거리
+        double dx = points[i - 1].x - points[j - 1].x;
+        double dy = points[i - 1].y - points[j - 1].y;
+        double dz = points[i - 1].z - points[j - 1].z;
         dist[i][j] = std::sqrt(dx * dx + dy * dy + dz * dz);
       }
     }
   }
 
-  // Held-Karp 알고리즘 (비트마스크를 사용한 동적 계획법)
-  // dp[mask][j] = mask에 있는 모든 도시를 방문하고 j에 있는 경로의 최소 비용
-  std::unordered_map<std::pair<int, int>, double, StateHash> dp;
-  std::unordered_map<std::pair<int, int>, int, StateHash> parent;
-
-  // 초기 상태: 0번 점만 방문
-  for (int j = 0; j < n; ++j) {
-    if (j != 0) {  // 시작점 0 에서 다른 점으로
-      dp[{1 | (1 << j), j}] = dist[0][j];
-      parent[{1 | (1 << j), j}] = 0;
-    }
+  // 많은 참외가 있을 경우 경고
+  if (n > 11) {
+    QMessageBox::warning(this, "경고", "계산 효율성을 위해 최대 11개 참외까지 지원합니다.");
+    return;
   }
 
-  // 모든 부분집합에 대해 계산
-  int allVisited = (1 << n) - 1;
-  for (int mask = 3; mask <= allVisited; ++mask) {
-    // 0번은 항상 시작점이므로 포함되어야 함
-    if (!(mask & 1)) continue;
-
-    for (int j = 1; j < n; ++j) {
-      // j가 mask에 포함되어 있는지 확인
-      if (!(mask & (1 << j))) continue;
-
-      // j 이전의 마지막 도시를 결정
-      int prevMask = mask & ~(1 << j);
-      double minCost = std::numeric_limits<double>::max();
-      int minPrev = -1;
-
-      for (int k = 0; k < n; ++k) {
-        if (!(prevMask & (1 << k))) continue;
-        if (k == j) continue;
-
-        double cost = dp[{prevMask, k}] + dist[k][j];
-        if (cost < minCost) {
-          minCost = cost;
-          minPrev = k;
-        }
-      }
-
-      dp[{mask, j}] = minCost;
-      parent[{mask, j}] = minPrev;
-    }
+  // 참외가 적을 경우(11개 이하) 모든 순열을 시도하는 방식 사용
+  std::vector<int> indices;
+  for (int i = 1; i <= n; ++i) {  // 1부터 시작 (0은 매니퓰레이터 위치)
+    indices.push_back(i);
   }
 
-  // 최종 경로 비용 계산 (모두 방문 후 0으로 돌아오기)
-  minCost = std::numeric_limits<double>::max();
-  int lastCity = -1;
+  std::vector<int> bestPath;
+  double bestCost = std::numeric_limits<double>::max();
 
-  for (int j = 1; j < n; ++j) {
-    double cost = dp[{allVisited, j}] + dist[j][0];
-    if (cost < minCost) {
-      minCost = cost;
-      lastCity = j;
+  // 모든 순열 시도
+  do {
+    double currentCost = dist[0][indices[0]];  // 매니퓰레이터에서 첫 번째 참외까지
+
+    for (int i = 0; i < indices.size() - 1; ++i) {
+      currentCost += dist[indices[i]][indices[i + 1]];
     }
-  }
 
-  // 경로 재구성
+    currentCost += dist[indices.back()][0];  // 마지막 참외에서 매니퓰레이터로
+
+    if (currentCost < bestCost) {
+      bestCost = currentCost;
+      bestPath = indices;
+    }
+
+  } while (std::next_permutation(indices.begin(), indices.end()));
+
+  // 최적 경로 구성 (매니퓰레이터 위치에서 시작하여 다시 돌아옴)
   optimalPath.clear();
-  optimalPath.push_back(0);  // 시작점
+  optimalPath.push_back(-1);  // 매니퓰레이터 위치 (-1로 표시)
 
-  int mask = allVisited;
-  int currentCity = lastCity;
-
-  optimalPath.push_back(currentCity);  // 마지막 도시 추가
-
-  // 역추적으로 경로 복원
-  while (currentCity != 0) {
-    int nextMask = mask & ~(1 << currentCity);
-    int nextCity = parent[{mask, currentCity}];
-
-    if (nextCity != 0)  // 시작점은 이미 추가됨
-      optimalPath.push_back(nextCity);
-
-    mask = nextMask;
-    currentCity = nextCity;
+  for (int idx : bestPath) {
+    optimalPath.push_back(idx - 1);  // 실제 points 배열 인덱스로 변환
   }
 
-  std::reverse(optimalPath.begin(), optimalPath.end());  // 경로를 시작점부터 순서대로 정렬
-  optimalPath.push_back(0);                              // 다시 시작점으로 돌아오기
+  optimalPath.push_back(-1);  // 매니퓰레이터 위치로 돌아오기
+  minCost = bestCost;
 
   // 결과 표시
-  QString resultText = QString("최적 경로 비용: %1\n경로: ").arg(minCost);
-  for (int i = 0; i < optimalPath.size(); ++i) {
+  QString resultText = QString("최적 경로 비용: %1\n경로: %2").arg(minCost).arg(manipulatorPosition.name);
+
+  for (int i = 1; i < optimalPath.size() - 1; ++i) {
     int idx = optimalPath[i];
-    resultText += points[idx].name;
-    if (i < optimalPath.size() - 1) {
-      resultText += " → ";
-    }
+    resultText += " → " + points[idx].name;
   }
 
+  resultText += " → " + manipulatorPosition.name;
   resultLabel->setText(resultText);
 
   // 시각화 업데이트
@@ -683,10 +601,10 @@ void MainWindow::addDefaultPoints() {
   // 랜덤 좌표 생성을 위한 설정
   std::random_device rd;
   std::mt19937 gen(rd());
-  
+
   // X, Y축 범위 (-50~50)
   std::uniform_real_distribution<float> distXY(-50.0f, 50.0f);
-  
+
   // Z축 범위 (0~100)
   std::uniform_real_distribution<float> distZ(0.0f, 100.0f);
 
@@ -717,13 +635,23 @@ void MainWindow::addDefaultPoints() {
 // 최적 경로 ROS2 발행 함수
 void MainWindow::publishOptimalPath() {
   // 경로가 없으면 발행하지 않음
-  if (optimalPath.isEmpty() || points.isEmpty()) {
+  if (optimalPath.isEmpty()) {
     statusLabel->setText("발행할 경로가 없습니다. 먼저 경로를 계산하세요.");
     return;
   }
 
-  // QNode를 통해 수확 순서 발행
-  qnode->publishHarvestOrder(optimalPath, points);
+  // optimalPath에서 매니퓰레이터 위치 제외하고 실제 참외만 포함된 경로 생성
+  QVector<int> harvestPath;
+
+  // 매니퓰레이터 시작/종료 위치 제외하고 중간 참외들만 수집
+  for (int i = 1; i < optimalPath.size() - 1; ++i) {
+    if (optimalPath[i] != -1) {
+      harvestPath.append(optimalPath[i]);
+    }
+  }
+
+  // QNode를 통해 수확 순서 발행 (매니퓰레이터 시작 위치 정보 포함)
+  qnode->publishHarvestOrder(harvestPath, points, manipulatorPosition);
 
   // 상태 업데이트
   statusLabel->setText("수확 순서가 ROS2 토픽 '/harvest_ordering'에 발행되었습니다.");

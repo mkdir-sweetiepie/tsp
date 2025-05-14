@@ -45,6 +45,9 @@ class QNode : public QThread {
   // 수확 순서 발행 메소드 추가
   void publishHarvestOrder(const QVector<int>& path, const QVector<Point3D>& points);
 
+  // 매니퓰레이터 위치를 포함한 수확 순서 발행 메소드 추가 (public으로 변경)
+  void publishHarvestOrder(const QVector<int>& path, const QVector<Point3D>& points, const Point3D& manipulatorPos);
+
  Q_SIGNALS:
   void rosShutDown();
   void newCropDataReceived();  // 새 참외 데이터가 수신되면 발생하는 시그널

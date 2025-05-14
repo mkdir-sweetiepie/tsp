@@ -50,11 +50,11 @@ void QNode::cropCallback(const vision_msgs::msg::DetectedCropArray::SharedPtr ms
   // 수신된 참외 데이터 저장
   crop_data = *msg;
 
-  // 메인 윈도우에 신호 전송
+  // 메인 윈도우에 시그널 전송
   Q_EMIT newCropDataReceived();
 }
 
-// 수확 순서 발행 메소드 구현
+// 기본 수확 순서 발행 메소드 구현
 void QNode::publishHarvestOrder(const QVector<int>& path, const QVector<Point3D>& points) {
   // 경로가 비어있으면 발행하지 않음
   if (path.isEmpty() || points.isEmpty()) {
@@ -119,6 +119,81 @@ void QNode::publishHarvestOrder(const QVector<int>& path, const QVector<Point3D>
 
     message->crop_ids.push_back(id);
   }
+
+  // 메시지 발행
+  harvest_publisher->publish(*message);
+}
+
+// 매니퓰레이터 위치를 고려한 수확 순서 발행 메소드 구현
+void QNode::publishHarvestOrder(const QVector<int>& path, const QVector<Point3D>& points, const Point3D& manipulatorPos) {
+  if (!rclcpp::ok()) {
+    return;
+  }
+
+  // 메시지 생성 - 기존 HarvestOrdering 타입 사용
+  auto message = std::make_shared<vision_msgs::msg::HarvestOrdering>();
+
+  // 헤더 설정
+  message->header.stamp = node->now();
+  message->header.frame_id = "map";
+
+  // 매니퓰레이터 시작 위치 정보 포함 - 커스텀 필드가 있다면 추가
+  // 기본 메시지 타입에 없다면 메타데이터로 추가하거나, 수정된 메시지 타입이 필요
+
+  // 원본 메시지와 동일한 형태로 참외 객체 정보 복사
+  for (const auto& point : points) {
+    vision_msgs::msg::DetectedCrop crop;
+
+    // 이름에서 ID 추출 ("참외1" -> 1)
+    QString name = point.name;
+    bool ok;
+    int id = name.mid(2).toInt(&ok);
+
+    if (!ok) {
+      // 변환 실패 시 인덱스를 찾아서 ID 설정
+      for (int i = 0; i < points.size(); ++i) {
+        if (points[i].name == name) {
+          id = i + 1;  // 1부터 시작하는 ID 사용
+          break;
+        }
+      }
+    }
+
+    crop.id = id;
+    crop.x = point.x;
+    crop.y = point.y;
+    crop.z = point.z;
+
+    message->objects.push_back(crop);
+  }
+
+  // 총 객체 수 설정
+  message->total_objects = points.size();
+
+  // 수확 순서 추가 (ID 배열)
+  for (int i = 0; i < path.size(); ++i) {
+    int pointIndex = path[i];
+
+    // 인덱스 유효성 검사
+    if (pointIndex < 0 || pointIndex >= points.size()) {
+      continue;
+    }
+
+    // 참외 이름에서 ID 추출 ("참외1" -> 1)
+    QString name = points[pointIndex].name;
+    bool ok;
+    int id = name.mid(2).toInt(&ok);
+
+    if (!ok) {
+      // 변환 실패 시 인덱스 사용
+      id = pointIndex + 1;  // 1부터 시작하는 ID 사용
+    }
+
+    message->crop_ids.push_back(id);
+  }
+
+  // 매니퓰레이터 시작 위치 정보 로그 출력
+  RCLCPP_INFO(node->get_logger(), "Publishing harvest order with %d crops. Manipulator start position: (%.2f, %.2f, %.2f)", path.size(), manipulatorPos.x, manipulatorPos.y, manipulatorPos.z);
 
   // 메시지 발행
   harvest_publisher->publish(*message);

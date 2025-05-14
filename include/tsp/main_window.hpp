@@ -20,7 +20,6 @@
 #include <QTableWidget>
 #include <QVector>
 #include <QtDataVisualization/Q3DScatter>
-#include <QtDataVisualization/Q3DTheme>
 #include <QtDataVisualization/QScatter3DSeries>
 #include <QtDataVisualization/QScatterDataProxy>
 #include <QtDataVisualization/QValue3DAxis>
@@ -70,7 +69,7 @@ class MainWindow : public QMainWindow {
   void onTableDataChanged(int row, int column);  // 테이블 데이터 변경 이벤트 처리
   void processCropData();                        // 수신된 참외 데이터 처리
   void requestCropData();                        // 참외 데이터 요청 버튼 클릭 핸들러
-  void publishOptimalPath();
+  void publishOptimalPath();                     // 최적 경로 발행 슬롯
 
  private:
   void closeEvent(QCloseEvent* event) override;  // 윈도우 닫기 이벤트 처리
@@ -92,12 +91,15 @@ class MainWindow : public QMainWindow {
   QPushButton* cropDataButton;     // 감지된 참외 데이터 요청 버튼
   QLabel* resultLabel;             // 결과 표시 레이블
   QLabel* statusLabel;             // 상태 표시 레이블
-  QPushButton* publishButton;
+  QPushButton* publishButton;      // 최적 경로 퍼블리시 버튼
 
-  QtDataVisualization::Q3DScatter* scatter3D;          // 3D 산점도 시각화 객체
-  QtDataVisualization::QScatter3DSeries* pointSeries;  // 점 시리즈
-  QtDataVisualization::QScatter3DSeries* pathSeries;   // 경로 시리즈
-  QtDataVisualization::QScatter3DSeries* orderSeries;  // 순서 시리즈
+  Point3D manipulatorPosition;  // 매니퓰레이터 시작 위치
+
+  QtDataVisualization::Q3DScatter* scatter3D;                // 3D 산점도 시각화 객체
+  QtDataVisualization::QScatter3DSeries* pointSeries;        // 점 시리즈
+  QtDataVisualization::QScatter3DSeries* pathSeries;         // 경로 시리즈
+  QtDataVisualization::QScatter3DSeries* orderSeries;        // 순서 시리즈
+  QtDataVisualization::QScatter3DSeries* manipulatorSeries;  // 매니퓰레이터 시각화를 위한 시리즈
 
   QVector<Point3D> points;   // 3D 점 배열
   QVector<int> optimalPath;  // 최적 경로 인덱스 배열
@@ -106,4 +108,4 @@ class MainWindow : public QMainWindow {
   bool isInitializing = false;  // 초기화 플래그 추가
 };
 
-#endif  // TSP_MAIN_WINDOW_HPP
+#endif  // TSP_MAIN_WINDOW_HPPu
