@@ -33,8 +33,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent), ui(new Ui::MainWi
   ui->setupUi(this);
   setWindowTitle("참외 수확 경로 최적화 (Held-Karp)");
 
-  // 매니퓰레이터 위치 초기화 (0, 0, 50)
-  manipulatorPosition = Point3D(0, 0, 50, "로봇");
+  // 매니퓰레이터 위치 초기화 (0, 0, 0)
+  manipulatorPosition = Point3D(0, 0, 0, "로봇");
 
   // ROS2 노드 초기화
   qnode = new QNode();
@@ -108,7 +108,7 @@ void MainWindow::setupUI() {
   QGroupBox* manipulatorGroupBox = new QGroupBox("매니퓰레이터 시작 위치");
   QVBoxLayout* manipulatorLayout = new QVBoxLayout(manipulatorGroupBox);
 
-  QLabel* manipulatorLabel = new QLabel("현재 위치: (0, 0, 50)");
+  QLabel* manipulatorLabel = new QLabel("현재 위치: (0, 0, 0)");
   manipulatorLayout->addWidget(manipulatorLabel);
 
   leftLayout->addWidget(manipulatorGroupBox);
@@ -144,11 +144,17 @@ void MainWindow::setupUI() {
 
   // 축 설정 (X,Y축: -50~50, Z축: 0~100)
   scatter3D->axisX()->setTitle("X");
-  scatter3D->axisY()->setTitle("Y (아래 방향 +)");  // Y축 레이블 변경
+  scatter3D->axisY()->setTitle("Y");  // Y축 레이블 변경
   scatter3D->axisZ()->setTitle("Z");
   scatter3D->axisX()->setTitleVisible(true);
   scatter3D->axisY()->setTitleVisible(true);
   scatter3D->axisZ()->setTitleVisible(true);
+
+  // Qt 버전에 따라 올바른 플래그 설정 방법이 다름
+  scatter3D->setSelectionMode(QAbstract3DGraph::SelectionNone);        // 점 선택 비활성화
+  scatter3D->scene()->activeCamera()->setCameraPosition(45, 45, 200);  // 초기 카메라 위치 설정
+  scatter3D->scene()->activeCamera()->setZoomLevel(85);                // 줌 레벨 설정
+  scatter3D->setAspectRatio(1.5f);                                     // 화면비 설정
 
   // 고정 범위 설정
   scatter3D->axisX()->setRange(-50, 50);
